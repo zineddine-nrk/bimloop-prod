@@ -112,10 +112,6 @@
                     </select>
                 </div>
                 <div class="row" style="gap: 6px;">
-                    <button class="btn btn-secondary btn-sm" id="exportIfcBtn" onclick="exportProjectIfc()">
-                        <i data-lucide="file-down"></i> <span id="exportIfcLabel">Export to IFC</span>
-                    </button>
-                    <input type="file" id="projectIfcInput" accept=".ifc" style="display:none;">
                     <button class="btn btn-secondary btn-sm" id="exportPemBtn" onclick="openPemdModal()" title="Generate a PEM report">
                         <i data-lucide="file-spreadsheet"></i> Rapport PEM
                     </button>
@@ -263,80 +259,6 @@ const TYPE_LABELS_EN = { "Mur":"Wall","Mur rideau":"Curtain wall","Porte":"Door"
 function stLbl(s){return STATUS_LABELS_EN[s]||s||"—";}
 function tyLbl(t){return TYPE_LABELS_EN[t]||t||"—";}
 
-async function refreshExportIfcLabel() {
-    const labelEl = document.getElementById("exportIfcLabel");
-    if (!currentProjectId) { labelEl.textContent = "Export to IFC"; return; }
-    try {
-        const r = await fetch(`/api/tracker/projects/${currentProjectId}/ifc-info`);
-        if (!r.ok) { labelEl.textContent = "Export to IFC"; return; }
-        const info = await r.json();
-        labelEl.textContent = info.has_ifc ? "Export to IFC" : "Link IFC + Export";
-    } catch { labelEl.textContent = "Export to IFC"; }
-}
-
-async function exportProjectIfc() {
-    if (!currentProjectId) { alert("No project selected."); return; }
-    const infoRes = await fetch(`/api/tracker/projects/${currentProjectId}/ifc-info`);
-    const info = await infoRes.json();
-    if (!info.has_ifc) {
-        alert("First use: select the source IFC file for this project.\nIt will be remembered for future exports.");
-        document.getElementById("projectIfcInput").click();
-        return;
-    }
-    await downloadEnrichedIfc();
-}
-
-document.getElementById("projectIfcInput").addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    e.target.value = "";
-    if (!file || !currentProjectId) return;
-    const btn = document.getElementById("exportIfcBtn");
-    const lbl = document.getElementById("exportIfcLabel");
-    const origLbl = lbl.textContent;
-    btn.disabled = true; lbl.textContent = "Uploading…";
-    const fd = new FormData(); fd.append("file", file);
-    try {
-        const res = await fetch(`/api/tracker/projects/${currentProjectId}/ifc`, { method: "POST", body: fd });
-        if (!res.ok) {
-            const err = await res.json().catch(() => ({}));
-            alert(`Upload error: ${err.detail || res.status}`);
-            return;
-        }
-        await downloadEnrichedIfc();
-    } finally {
-        btn.disabled = false;
-        lbl.textContent = origLbl;
-        refreshExportIfcLabel();
-    }
-});
-
-async function downloadEnrichedIfc() {
-    const btn = document.getElementById("exportIfcBtn");
-    const lbl = document.getElementById("exportIfcLabel");
-    const origLbl = lbl.textContent;
-    btn.disabled = true; lbl.textContent = "Generating…";
-    try {
-        const res = await fetch(`/api/tracker/projects/${currentProjectId}/export-ifc`);
-        if (!res.ok) {
-            let msg = `HTTP ${res.status}`;
-            try { const j = await res.json(); msg = j.detail || msg; } catch {}
-            alert(`Export error: ${msg}`);
-            return;
-        }
-        const cd = res.headers.get("Content-Disposition") || "";
-        const m = cd.match(/filename="?([^"]+)"?/);
-        const filename = m ? m[1] : `project_${currentProjectId}.ifc`;
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = filename; a.click();
-        URL.revokeObjectURL(url);
-    } finally {
-        btn.disabled = false;
-        lbl.textContent = origLbl;
-    }
-}
-
 async function downloadBtpMatchPdf() {
     if (!currentProjectId) { alert("No project selected."); return; }
     const btn = document.getElementById("exportBtpMatchBtn");
@@ -434,7 +356,6 @@ function onProjectChange() {
     setCurrentProjectId(sel.value);
     loadStats();
     loadComponents();
-    refreshExportIfcLabel();
 }
 
 async function loadStats() {

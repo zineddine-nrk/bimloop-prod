@@ -171,46 +171,10 @@ def get_project(project_id: int) -> Optional[Dict]:
         return _row_to_dict(row, cur) if row else None
 
 
-PROJECT_IFC_DIR = os.path.join(os.path.dirname(DB_PATH), "project_ifcs")
-
-def set_project_ifc(project_id: int, filename: str, content: bytes) -> Dict:
-    """Stocke le fichier IFC source d'un projet sur disque + chemin en DB."""
-    init_db()
-    os.makedirs(PROJECT_IFC_DIR, exist_ok=True)
-    safe_name = f"project_{project_id}.ifc"
-    full_path = os.path.join(PROJECT_IFC_DIR, safe_name)
-    with open(full_path, "wb") as f:
-        f.write(content)
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(
-            "UPDATE projects SET ifc_filename = ?, ifc_path = ? WHERE id = ?",
-            (filename, full_path, project_id),
-        )
-        conn.commit()
-    return {"filename": filename, "path": full_path, "size": len(content)}
-
-
-def get_project_ifc(project_id: int) -> Optional[Dict]:
-    """Retourne {filename, path} si l'IFC existe sur disque, sinon None."""
-    init_db()
-    with sqlite3.connect(DB_PATH) as conn:
-        row = conn.execute(
-            "SELECT ifc_filename, ifc_path FROM projects WHERE id = ?",
-            (project_id,),
-        ).fetchone()
-    if not row or not row[1] or not os.path.exists(row[1]):
-        return None
-    return {"filename": row[0], "path": row[1]}
-
 
 def delete_project(project_id: int) -> Dict[str, int]:
-    """Supprime un projet, ses composants, son historique et son fichier IFC."""
+    """Supprime un projet, ses composants et son historique."""
     init_db()
-    # Supprimer le fichier IFC source si présent
-    ifc_info = get_project_ifc(project_id)
-    if ifc_info and os.path.exists(ifc_info["path"]):
-        try: os.remove(ifc_info["path"])
-        except OSError: pass
     with sqlite3.connect(DB_PATH) as conn:
         # Récupérer les ids des composants du projet
         comp_ids = [r[0] for r in conn.execute(

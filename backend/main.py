@@ -22,10 +22,8 @@ from tracker import (
     get_statuses_by_ids, STATUTS_VALIDES,
     list_projects, create_project, get_project, delete_project,
     update_component_meta, CONDITIONS_VALIDES, AGES_VALIDES,
-    set_project_ifc, get_project_ifc,
     project_belongs_to_user, component_belongs_to_user,
 )
-from ifc_exporter import export_ifc_with_statuses
 from reuse_csv import generate_reuse_csv, get_pemd_grouped_data, generate_reuse_csv_from_data
 from pemd_pdf import generate_pemd_pdf_from_data
 from di_csv import generate_di_csv, get_di_grouped_data, generate_di_csv_from_data
@@ -225,35 +223,6 @@ async def tracker_delete_project(project_id: int, current_user=Depends(get_curre
     return {"success": True, **delete_project(project_id)}
 
 
-@protected_api.post("/tracker/projects/{project_id}/ifc")
-async def tracker_upload_project_ifc(project_id: int, file: UploadFile = File(...), current_user=Depends(get_current_user)):
-    """Stocke le fichier IFC d'origine d'un projet (à uploader une seule fois)."""
-    _verify_ownership(project_id, current_user.id)
-    if not file.filename.lower().endswith(".ifc"):
-        raise HTTPException(status_code=400, detail="Le fichier doit être au format .ifc")
-    content = await file.read()
-    info = set_project_ifc(project_id, file.filename, content)
-    return {"success": True, **info}
-
-
-@protected_api.get("/tracker/projects/{project_id}/ifc-info")
-async def tracker_project_ifc_info(project_id: int, current_user=Depends(get_current_user)):
-    """Indique si un IFC source est stocké pour ce projet."""
-    _verify_ownership(project_id, current_user.id)
-    info = get_project_ifc(project_id)
-    return {"has_ifc": info is not None, "filename": info["filename"] if info else None}
-
-
-def _build_export_filename(original: str) -> str:
-    """Retourne '<base>_<YYYY-MM-DD>.ifc'.
-    Strip tout suffixe '_YYYY-MM-DD' déjà présent (évite l'accumulation)."""
-    import re
-    from datetime import datetime
-    base = original[:-4] if original.lower().endswith(".ifc") else original
-    # Retire tous les '_YYYY-MM-DD' en fin de chaîne (un ou plusieurs)
-    base = re.sub(r"(_\d{4}-\d{2}-\d{2})+$", "", base)
-    return f"{base}_{datetime.now().strftime('%Y-%m-%d')}.ifc"
-
 
 @protected_api.get("/tracker/projects/{project_id}/export-reuse-csv")
 async def tracker_export_reuse_csv(project_id: int, current_user=Depends(get_current_user)):
@@ -319,33 +288,6 @@ async def tracker_export_btp_match_pdf(project_id: int, current_user=Depends(get
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@protected_api.get("/tracker/projects/{project_id}/export-ifc")
-async def tracker_export_project_ifc(project_id: int, current_user=Depends(get_current_user)):
-    """Génère et télécharge l'IFC enrichi à partir du fichier source stocké."""
-    _verify_ownership(project_id, current_user.id)
-    info = get_project_ifc(project_id)
-    if not info:
-        raise HTTPException(
-            status_code=400,
-            detail="Aucun fichier IFC source associé à ce projet. Uploadez-le d'abord.",
-        )
-    try:
-        ifc_bytes = export_ifc_with_statuses(info["path"], project_id=project_id)
-    except Exception as e:
-        import traceback
-        print("[export-ifc-project] ERREUR :\n" + traceback.format_exc())
-        raise HTTPException(
-            status_code=500,
-            detail=f"Échec de l'enrichissement IFC : {type(e).__name__} — {e}",
-        )
-    out_filename = _build_export_filename(info["filename"])
-    return Response(
-        content=ifc_bytes,
-        media_type="application/x-step",
-        headers={"Content-Disposition": f'attachment; filename="{out_filename}"'},
     )
 
 
@@ -673,88 +615,11 @@ async def tracker_page():
     return FileResponse(os.path.join(FRONTEND_DIR, "tracker.html"))
 
 
-@app.get("/viewer3d")
-async def viewer3d_page():
-    """Page du visualiseur IFC 3D."""
-    return FileResponse(os.path.join(FRONTEND_DIR, "viewer3d.html"))
-
-
 @app.get("/settings")
 async def settings_page():
     """Page Paramètres."""
     return FileResponse(os.path.join(FRONTEND_DIR, "settings.html"))
 
-
-# Cache local du WASM web-ifc (évite les soucis de CDN / chemins bundlés)
-_WEB_IFC_VERSION = "0.0.39"  # pinné par web-ifc-three@0.0.125 (^0.0.39)
-_WASM_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "_wasm_cache")
-os.makedirs(_WASM_CACHE_DIR, exist_ok=True)
-
-
-def _serve_wasm_asset(filename: str) -> FileResponse:
-    """Télécharge (1re fois) puis sert un asset WASM web-ifc depuis le cache local.
-    On essaie plusieurs versions en cascade pour trouver celle qui correspond au
-    JS wrapper bundlé par jsdelivr (sinon OpenModel is not a function)."""
-    allowed = {"web-ifc.wasm", "web-ifc-mt.wasm", "web-ifc-mt.worker.js"}
-    if filename not in allowed:
-        raise HTTPException(status_code=404, detail="Asset inconnu.")
-    cached_path = os.path.join(_WASM_CACHE_DIR, filename)
-    if not os.path.exists(cached_path):
-        import urllib.request
-        # Essayer jsdelivr d'abord (même source que le JS wrapper), puis unpkg
-        # Plusieurs versions testées car web-ifc-three@0.0.125 est ancien.
-        candidates = [
-            f"https://cdn.jsdelivr.net/npm/web-ifc@{_WEB_IFC_VERSION}/{filename}",
-            f"https://unpkg.com/web-ifc@{_WEB_IFC_VERSION}/{filename}",
-        ]
-        last_err = None
-        for url in candidates:
-            try:
-                with urllib.request.urlopen(url, timeout=30) as r:
-                    data = r.read()
-                with open(cached_path, "wb") as f:
-                    f.write(data)
-                print(f"[viewer3d] WASM téléchargé depuis : {url} ({len(data)} octets)")
-                break
-            except Exception as e:
-                last_err = e
-                continue
-        else:
-            raise HTTPException(status_code=502, detail=f"Échec téléchargement WASM: {last_err}")
-    media = "application/wasm" if filename.endswith(".wasm") else "application/javascript"
-    return FileResponse(cached_path, media_type=media)
-
-
-@app.get("/viewer3d-assets/{filename}")
-async def viewer3d_assets(filename: str):
-    return _serve_wasm_asset(filename)
-
-
-# Le bundle jsdelivr `/+esm` de web-ifc-three préfixe TOUJOURS `/app/.cache/npm/`
-# à l'URL du WASM et ignore setWasmPath. On ajoute donc une route qui matche ce
-# préfixe pour servir le WASM quelle que soit la stratégie du bundle.
-@app.get("/app/.cache/npm/{path:path}")
-async def viewer3d_jsdelivr_proxy(path: str):
-    # Le "path" peut être n'importe quoi : on extrait juste le nom de fichier final.
-    filename = path.rsplit("/", 1)[-1]
-    return _serve_wasm_asset(filename)
-
-
-@protected_api.get("/tracker/projects/{project_id}/ifc-raw")
-async def tracker_project_ifc_raw(project_id: int, current_user=Depends(get_current_user)):
-    """Sert le fichier IFC source brut (pour le viewer 3D)."""
-    _verify_ownership(project_id, current_user.id)
-    info = get_project_ifc(project_id)
-    if not info or not os.path.exists(info["path"]):
-        raise HTTPException(
-            status_code=404,
-            detail="Aucun fichier IFC source associé à ce projet.",
-        )
-    return FileResponse(
-        info["path"],
-        media_type="application/x-step",
-        filename=info["filename"],
-    )
 
 # Nouvelle URL avec project_id (utilisée par les QR codes et le clic dans le tracker)
 

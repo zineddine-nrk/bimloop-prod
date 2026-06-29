@@ -18,7 +18,7 @@ import io
 from collections import defaultdict
 from typing import List, Dict, Optional, Tuple
 
-from tracker import get_all_components, get_project_ifc, get_project
+from tracker import get_all_components, get_project
 
 
 # ============================================================
@@ -242,8 +242,7 @@ CSV_HEADERS = [
 def _build_enriched_components(project_id: int) -> List[Dict]:
     """Récupère et enrichit les composants 'à réutiliser' avec les données IFC."""
     components = get_all_components(project_id=project_id, status_filter="à réutiliser")
-    ifc_info = get_project_ifc(project_id)
-    ifc_index = _parse_ifc_index(ifc_info["path"]) if ifc_info else {}
+    ifc_index = {}
 
     enriched: List[Dict] = []
     for comp in components:

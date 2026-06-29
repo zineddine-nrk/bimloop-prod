@@ -24,7 +24,7 @@ import io
 from collections import defaultdict
 from typing import List, Dict, Optional
 
-from tracker import get_all_components, get_project_ifc, get_project
+from tracker import get_all_components, get_project
 
 
 # ============================================================
@@ -181,20 +181,7 @@ def get_di_grouped_data(project_id: int) -> List[Dict]:
 
     all_comps = get_all_components(project_id=project_id)
 
-    # Enrichissement IFC
-    ifc_info = get_project_ifc(project_id)
     ifc_index: Dict[str, Dict] = {}
-    if ifc_info:
-        try:
-            from ifc_parser import parse_ifc_file
-            data = parse_ifc_file(ifc_info["path"])
-            elements = data.get("elements", []) if isinstance(data, dict) else data
-            for el in elements:
-                gid = el.get("id")
-                if gid:
-                    ifc_index[gid] = el
-        except Exception:
-            ifc_index = {}
 
     # Agrégation par catégorie DI
     per_cat: Dict[int, Dict] = defaultdict(

@@ -22,7 +22,6 @@
     const NAV = [
         { key: "extraction", label: "Extraction",   icon: "file-search",      href: "/" },
         { key: "tracking",   label: "Tracking",     icon: "map-pin",          href: "/tracker" },
-        { key: "viewer",     label: "3D Viewer",    icon: "box",              href: "/viewer3d" },
     ];
 
     const NAV_BOTTOM = [

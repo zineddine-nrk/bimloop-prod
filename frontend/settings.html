@@ -47,9 +47,7 @@
                 <button class="btn btn-secondary" id="refreshStorageBtn">
                     <i data-lucide="refresh-cw"></i> Refresh
                 </button>
-                <button class="btn btn-ghost" id="clearWasmBtn">
-                    <i data-lucide="trash-2"></i> Clear WASM cache
-                </button>
+
             </div>
         </div>
     </div>
@@ -77,7 +75,7 @@
                     <tr><td class="text-muted">Version</td><td><span class="badge badge-primary">MVP 1.0</span></td></tr>
                     <tr><td class="text-muted">Backend</td><td>FastAPI + Python 3</td></tr>
                     <tr><td class="text-muted">Frontend</td><td>Vanilla JS + Design System</td></tr>
-                    <tr><td class="text-muted">3D Viewer</td><td>Three.js + web-ifc</td></tr>
+
                 </tbody>
             </table>
         </div>
@@ -150,9 +148,6 @@
     }
 
     document.getElementById("refreshStorageBtn").addEventListener("click", loadStorage);
-    document.getElementById("clearWasmBtn").addEventListener("click", () => {
-        alert("The WASM cache will be rebuilt the next time you open the 3D Viewer.\n\nTo clear it manually, delete the folder backend/_wasm_cache/.");
-    });
 
     checkHealth();
     loadStorage();
