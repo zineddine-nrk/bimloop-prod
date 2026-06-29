@@ -143,7 +143,6 @@
             <option value="transporté">In transit</option>
             <option value="stocké">Stored</option>
             <option value="à réutiliser">To reuse</option>
-            <option value="réutilisé">Reused</option>
             <option value="à recycler">To recycle</option>
         </select>
         <select class="filter-select" id="filterType" onchange="loadComponents()">
@@ -183,7 +182,6 @@
     <button class="bulk-btn" onclick="bulkSetStatus('transporté')"   style="background:#3730a3;">In transit</button>
     <button class="bulk-btn" onclick="bulkSetStatus('stocké')"       style="background:#9d174d;">Stored</button>
     <button class="bulk-btn" onclick="bulkSetStatus('à réutiliser')" style="background:#059669;">To reuse</button>
-    <button class="bulk-btn" onclick="bulkSetStatus('réutilisé')"    style="background:#065f46;">Reused</button>
     <button class="bulk-btn" onclick="bulkSetStatus('à recycler')"   style="background:#b91c1c;">To recycle</button>
     <span style="border-left: 1px solid var(--slate-700); height: 22px; margin: 0 6px;"></span>
     <button class="bulk-btn" onclick="openBulkMetaModal()" style="background:#7c3aed;">Info</button>
@@ -251,7 +249,6 @@ const STATUS_LABELS_EN = {
     "démonté":      "Dismantled",
     "transporté":   "In transit",
     "stocké":       "Stored",
-    "réutilisé":    "Reused",
     "à réutiliser": "To reuse",
     "à recycler":   "To recycle",
 };

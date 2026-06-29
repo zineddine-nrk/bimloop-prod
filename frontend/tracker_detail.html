@@ -200,7 +200,6 @@ const STATUS_COLORS = {
     "démonté":        "#92400e",
     "transporté":     "#3730a3",
     "stocké":         "#6b21a8",
-    "réutilisé":      "#065f46",
     "à réutiliser":   "#065f46",
     "à recycler":     "#b91c1c",
 };
@@ -209,7 +208,6 @@ const STATUS_BG = {
     "démonté":        "#fef3c7",
     "transporté":     "#e0e7ff",
     "stocké":         "#f3e8ff",
-    "réutilisé":      "#d1fae5",
     "à réutiliser":   "#d1fae5",
     "à recycler":     "#fee2e2",
 };
@@ -218,7 +216,6 @@ const STATUS_ICONS = {
     "démonté":        "🔨",
     "transporté":     "🚚",
     "stocké":         "📦",
-    "réutilisé":      "♻️",
     "à réutiliser":   "♻️",
     "à recycler":     "🔄",
 };
@@ -230,7 +227,6 @@ const STATUS_LABELS_EN = {
     "démonté":      "Dismantled",
     "transporté":   "In transit",
     "stocké":       "Stored",
-    "réutilisé":    "Reused",
     "à réutiliser": "To reuse",
     "à recycler":   "To recycle",
 };
@@ -361,7 +357,7 @@ function render(comp) {
         </div>
         <div class="card-body">
             <p class="text-muted text-sm mb-4">Click the new status — you'll be asked for a location if needed.</p>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;gap:8px;overflow-x:auto;white-space:nowrap;padding-bottom:4px;">
                 ${STATUTS.map(s => `
                     <button class="status-btn ${comp.status===s?'active':''}" onclick="handleStatusClick('${s}')">
                         ${STATUS_ICONS[s]||""} ${stLbl(s)}
