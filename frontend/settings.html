@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Settings — IFC Analyzer</title>
+    <link rel="stylesheet" href="/static/assets/design.css?v=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+<div class="stack-lg fade-in" style="max-width:760px;">
+
+    <!-- Section : Plateforme -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i data-lucide="building"></i> Platform</h3>
+        </div>
+        <div class="card-body stack">
+            <div class="form-field">
+                <label class="form-label">Platform name</label>
+                <input type="text" class="input" value="IFC Analyzer" id="platformName" />
+                <p class="form-hint">Displayed in the sidebar and page title.</p>
+            </div>
+            <div class="form-field">
+                <label class="form-label">Units</label>
+                <select class="select">
+                    <option>Metric (m, m², m³)</option>
+                    <option disabled>Imperial</option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section : Stockage -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i data-lucide="database"></i> Storage & cache</h3>
+        </div>
+        <div class="card-body stack">
+            <div id="storageInfo">
+                <div class="loader-block"><div class="spinner"></div><span>Loading…</span></div>
+            </div>
+            <div class="row">
+                <button class="btn btn-secondary" id="refreshStorageBtn">
+                    <i data-lucide="refresh-cw"></i> Refresh
+                </button>
+                <button class="btn btn-ghost" id="clearWasmBtn">
+                    <i data-lucide="trash-2"></i> Clear WASM cache
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section : API -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i data-lucide="server"></i> API & Health</h3>
+        </div>
+        <div class="card-body">
+            <div id="apiHealth">
+                <div class="loader-block"><div class="spinner"></div><span>Checking…</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section : À propos -->
+    <div class="card">
+        <div class="card-header">
+            <h3 class="card-title"><i data-lucide="info"></i> About</h3>
+        </div>
+        <div class="card-body">
+            <table class="table" style="border:none;box-shadow:none;">
+                <tbody>
+                    <tr><td class="text-muted">Version</td><td><span class="badge badge-primary">MVP 1.0</span></td></tr>
+                    <tr><td class="text-muted">Backend</td><td>FastAPI + Python 3</td></tr>
+                    <tr><td class="text-muted">Frontend</td><td>Vanilla JS + Design System</td></tr>
+                    <tr><td class="text-muted">3D Viewer</td><td>Three.js + web-ifc</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+<script src="/static/auth.js?v=1"></script>
+<script src="/static/assets/layout.js"></script>
+<script>
+    AppLayout.mount({
+        active: "settings",
+        eyebrow: "Configuration",
+        title: "Settings",
+    });
+
+    async function checkHealth() {
+        const target = document.getElementById("apiHealth");
+        try {
+            const res = await fetch("/api/health");
+            if (res.ok) {
+                const data = await res.json();
+                target.innerHTML = `
+                    <div class="alert alert-success">
+                        <i data-lucide="check-circle"></i>
+                        <div>
+                            <strong>Server is up</strong>
+                            <div class="text-sm" style="margin-top:4px;">${data.message || "OK"}</div>
+                        </div>
+                    </div>
+                `;
+            } else {
+                throw new Error("HTTP " + res.status);
+            }
+        } catch (err) {
+            target.innerHTML = `
+                <div class="alert alert-danger">
+                    <i data-lucide="alert-circle"></i>
+                    <div>
+                        <strong>Server unreachable</strong>
+                        <div class="text-sm">${err.message}</div>
+                    </div>
+                </div>
+            `;
+        }
+        if (window.lucide) lucide.createIcons();
+    }
+
+    async function loadStorage() {
+        const target = document.getElementById("storageInfo");
+        try {
+            const res = await fetch("/api/tracker/projects");
+            const projects = res.ok ? await res.json() : [];
+            const totalComponents = projects.reduce((s, p) => s + (p.component_count || 0), 0);
+            target.innerHTML = `
+                <div class="cards-grid">
+                    <div>
+                        <div class="text-muted text-sm">Projects</div>
+                        <div class="text-xl font-bold text-strong">${projects.length}</div>
+                    </div>
+                    <div>
+                        <div class="text-muted text-sm">Components</div>
+                        <div class="text-xl font-bold text-strong">${totalComponents.toLocaleString("en-US")}</div>
+                    </div>
+                </div>
+            `;
+        } catch {
+            target.innerHTML = `<p class="text-muted">Unavailable.</p>`;
+        }
+    }
+
+    document.getElementById("refreshStorageBtn").addEventListener("click", loadStorage);
+    document.getElementById("clearWasmBtn").addEventListener("click", () => {
+        alert("The WASM cache will be rebuilt the next time you open the 3D Viewer.\n\nTo clear it manually, delete the folder backend/_wasm_cache/.");
+    });
+
+    checkHealth();
+    loadStorage();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tracking — IFC Analyzer</title>
+    <link rel="stylesheet" href="/static/assets/design.css?v=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        /* Compat anciens noms (utilisés par le JS inline) */
+        .badge-in_building { background: var(--info-50);    color: var(--info-600); }
+        .badge-démonté    { background: var(--warning-50); color: #92400e; }
+        .badge-transporté { background: #e0e7ff;           color: #3730a3; }
+        .badge-stocké     { background: #f3e8ff;           color: #6b21a8; }
+        .badge-réutilisé  { background: var(--success-50); color: var(--success-700); }
+        .badge[class*="badge-"]:not(.badge-neutral):not(.badge-primary):not(.badge-success):not(.badge-warning):not(.badge-danger):not(.badge-info) {
+            display: inline-block; padding: 3px 10px; border-radius: 999px;
+            font-size: 11px; font-weight: 600; letter-spacing: .02em;
+        }
+        .empty-msg { text-align: center; padding: 48px 16px; color: var(--text-muted); font-size: 14px; }
+        .stat-chip {
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 8px 14px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-base);
+            box-shadow: var(--shadow-xs);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .stat-chip span { color: var(--primary-600); font-weight: 700; }
+        .stats-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+        .filters-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 16px; }
+        .filter-select { padding: 7px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); font-size: 13px; background: var(--bg-surface); }
+        .filter-select:hover { border-color: var(--border-strong); }
+
+        /* Tableau Tracker */
+        .comp-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: var(--shadow-xs);
+        }
+        .comp-table th {
+            background: var(--slate-50);
+            color: var(--text-muted);
+            padding: 12px 14px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+        .comp-table td {
+            padding: 11px 14px;
+            font-size: 13px;
+            color: var(--text-base);
+            border-bottom: 1px solid var(--border);
+        }
+        .comp-table tr:last-child td { border-bottom: none; }
+        .comp-table tbody tr { transition: background var(--t-fast); cursor: pointer; }
+        .comp-table tbody tr:hover { background: var(--slate-50); }
+        tr.selected-row { background: var(--primary-50) !important; }
+
+        /* Barre bulk en bas */
+        #bulkBar {
+            display: none;
+            position: fixed;
+            bottom: 24px; left: 50%;
+            transform: translateX(-50%);
+            background: var(--slate-900);
+            color: white;
+            padding: 12px 18px;
+            border-radius: 14px;
+            box-shadow: var(--shadow-lg);
+            z-index: 900;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            max-width: 95vw;
+        }
+        .bulk-btn { color: white; border: none; padding: 7px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 500; white-space: nowrap; transition: filter var(--t-fast); }
+        .bulk-btn:hover { filter: brightness(1.15); }
+        .row-chk { cursor: pointer; width: 16px; height: 16px; accent-color: var(--primary-600); }
+
+        .import-info { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+    </style>
+</head>
+<body>
+
+<!-- ============ CONTENU PAGE ============ -->
+<div class="fade-in">
+
+    <!-- ====== Toolbar projet ====== -->
+    <div class="card mb-4">
+        <div class="card-body" style="padding: 16px 20px;">
+            <div class="row" style="justify-content: space-between;">
+                <div class="row">
+                    <i data-lucide="folder" style="width:18px;height:18px;color:var(--text-muted);"></i>
+                    <span class="text-muted text-sm">Project:</span>
+                    <select class="select filter-select" id="projectSelect" onchange="onProjectChange()" style="min-width: 280px;">
+                        <option value="">Loading…</option>
+                    </select>
+                </div>
+                <div class="row" style="gap: 6px;">
+                    <button class="btn btn-secondary btn-sm" id="exportIfcBtn" onclick="exportProjectIfc()">
+                        <i data-lucide="file-down"></i> <span id="exportIfcLabel">Export to IFC</span>
+                    </button>
+                    <input type="file" id="projectIfcInput" accept=".ifc" style="display:none;">
+                    <button class="btn btn-secondary btn-sm" id="exportPemBtn" onclick="openPemdModal()" title="Generate a PEM report">
+                        <i data-lucide="file-spreadsheet"></i> Rapport PEM
+                    </button>
+                    <button class="btn btn-secondary btn-sm" id="exportDiBtn" onclick="openDiModal()" title="Caractérisation des déchets">
+                        <i data-lucide="trash-2"></i> Caractérisation des déchets
+                    </button>
+                    <button class="btn btn-secondary btn-sm" id="exportBtpMatchBtn" onclick="downloadBtpMatchPdf()" title="Generate a BTP Match PDF report">
+                        <i data-lucide="file-text"></i> BTP Match Export
+                    </button>
+                    <button class="btn btn-danger btn-sm" id="deleteProjectBtn" onclick="deleteCurrentProject()">
+                        <i data-lucide="trash-2"></i> Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ====== Stats du projet ====== -->
+    <div class="stats-row" id="statsRow">
+        <div class="stat-chip">Loading…</div>
+    </div>
+
+    <!-- ====== Filtres ====== -->
+    <div class="filters-row">
+        <select class="filter-select" id="filterStatus" onchange="loadComponents()">
+            <option value="">All statuses</option>
+            <option value="in_building">In building</option>
+            <option value="démonté">Dismantled</option>
+            <option value="transporté">In transit</option>
+            <option value="stocké">Stored</option>
+            <option value="à réutiliser">To reuse</option>
+            <option value="réutilisé">Reused</option>
+            <option value="à recycler">To recycle</option>
+        </select>
+        <select class="filter-select" id="filterType" onchange="loadComponents()">
+            <option value="">All types</option>
+        </select>
+        <span id="countLabel" class="text-muted text-sm" style="margin-left: 8px;"></span>
+    </div>
+
+    <!-- ====== Tableau ====== -->
+    <table class="comp-table" id="compTable">
+        <thead>
+            <tr>
+                <th style="width:40px; text-align:center;">
+                    <input type="checkbox" id="selectAllChk" onclick="toggleSelectAll(this)" title="Select all" class="row-chk">
+                </th>
+                <th>ID</th>
+                <th>Type</th>
+                <th>Material</th>
+                <th>IFC location</th>
+                <th>Status</th>
+                <th>Updated</th>
+            </tr>
+        </thead>
+        <tbody id="compBody"><tr><td colspan="7" class="empty-msg">Loading…</td></tr></tbody>
+    </table>
+
+</div>
+
+<!-- ====== Barre d'action bulk ====== -->
+<div id="bulkBar">
+    <span style="font-weight: 600; font-size: 13px;">
+        <span id="bulkCount">0</span> selected
+    </span>
+    <span style="color: var(--slate-400); font-size: 12px;">→ Status:</span>
+    <button class="bulk-btn" onclick="bulkSetStatus('in_building')"  style="background:#1e40af;">In building</button>
+    <button class="bulk-btn" onclick="bulkSetStatus('démonté')"      style="background:#92400e;">Dismantled</button>
+    <button class="bulk-btn" onclick="bulkSetStatus('transporté')"   style="background:#3730a3;">In transit</button>
+    <button class="bulk-btn" onclick="bulkSetStatus('stocké')"       style="background:#9d174d;">Stored</button>
+    <button class="bulk-btn" onclick="bulkSetStatus('à réutiliser')" style="background:#059669;">To reuse</button>
+    <button class="bulk-btn" onclick="bulkSetStatus('réutilisé')"    style="background:#065f46;">Reused</button>
+    <button class="bulk-btn" onclick="bulkSetStatus('à recycler')"   style="background:#b91c1c;">To recycle</button>
+    <span style="border-left: 1px solid var(--slate-700); height: 22px; margin: 0 6px;"></span>
+    <button class="bulk-btn" onclick="openBulkMetaModal()" style="background:#7c3aed;">Info</button>
+    <button onclick="clearSelection()" style="background:var(--slate-700);color:white;border:none;padding:7px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:500;">Cancel</button>
+</div>
+
+<!-- Layout -->
+<script src="/static/auth.js?v=1"></script>
+<script src="/static/assets/layout.js"></script>
+<script>
+    AppLayout.mount({
+        active: "tracking",
+        eyebrow: "Workspace",
+        title: "Component tracking",
+    });
+</script>
+
+<!-- Logique métier (inchangée — tous les IDs / fonctions préservés) -->
+<script>
+const LS_PROJECT_KEY = "ifc_analyzer:tracker_project_id";
+let currentProjectId = null;
+
+function setCurrentProjectId(id) {
+    currentProjectId = id ? Number(id) : null;
+    if (currentProjectId) {
+        localStorage.setItem(LS_PROJECT_KEY, String(currentProjectId));
+    } else {
+        localStorage.removeItem(LS_PROJECT_KEY);
+    }
+}
+
+function projectQuery() {
+    return currentProjectId ? `project_id=${currentProjectId}` : "";
+}
+
+async function loadProjects() {
+    const res = await fetch("/api/tracker/projects");
+    const projects = await res.json();
+    const sel = document.getElementById("projectSelect");
+
+    if (!projects.length) {
+        sel.innerHTML = '<option value="">No projects yet — send one from the Extraction page</option>';
+        currentProjectId = null;
+        return;
+    }
+
+    const saved = Number(localStorage.getItem(LS_PROJECT_KEY));
+    const exists = projects.find(p => p.id === saved);
+    if (exists) {
+        currentProjectId = saved;
+    } else {
+        currentProjectId = projects[0].id;
+        setCurrentProjectId(currentProjectId);
+    }
+
+    sel.innerHTML = projects.map(p => {
+        const date = (p.created_at || "").slice(0, 10);
+        return `<option value="${p.id}" ${p.id===currentProjectId?'selected':''}>${p.name} — ${p.component_count} comp. (${date})</option>`;
+    }).join("");
+}
+
+// Affichage anglais des clés canoniques fr stockées en DB
+const STATUS_LABELS_EN = {
+    "in_building":  "In building",
+    "démonté":      "Dismantled",
+    "transporté":   "In transit",
+    "stocké":       "Stored",
+    "réutilisé":    "Reused",
+    "à réutiliser": "To reuse",
+    "à recycler":   "To recycle",
+};
+const TYPE_LABELS_EN = { "Mur":"Wall","Mur rideau":"Curtain wall","Porte":"Door","Fenêtre":"Window","Dalle":"Slab","Escalier":"Stairs","Toiture":"Roof","Inconnu":"Unknown" };
+function stLbl(s){return STATUS_LABELS_EN[s]||s||"—";}
+function tyLbl(t){return TYPE_LABELS_EN[t]||t||"—";}
+
+async function refreshExportIfcLabel() {
+    const labelEl = document.getElementById("exportIfcLabel");
+    if (!currentProjectId) { labelEl.textContent = "Export to IFC"; return; }
+    try {
+        const r = await fetch(`/api/tracker/projects/${currentProjectId}/ifc-info`);
+        if (!r.ok) { labelEl.textContent = "Export to IFC"; return; }
+        const info = await r.json();
+        labelEl.textContent = info.has_ifc ? "Export to IFC" : "Link IFC + Export";
+    } catch { labelEl.textContent = "Export to IFC"; }
+}
+
+async function exportProjectIfc() {
+    if (!currentProjectId) { alert("No project selected."); return; }
+    const infoRes = await fetch(`/api/tracker/projects/${currentProjectId}/ifc-info`);
+    const info = await infoRes.json();
+    if (!info.has_ifc) {
+        alert("First use: select the source IFC file for this project.\nIt will be remembered for future exports.");
+        document.getElementById("projectIfcInput").click();
+        return;
+    }
+    await downloadEnrichedIfc();
+}
+
+document.getElementById("projectIfcInput").addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file || !currentProjectId) return;
+    const btn = document.getElementById("exportIfcBtn");
+    const lbl = document.getElementById("exportIfcLabel");
+    const origLbl = lbl.textContent;
+    btn.disabled = true; lbl.textContent = "Uploading…";
+    const fd = new FormData(); fd.append("file", file);
+    try {
+        const res = await fetch(`/api/tracker/projects/${currentProjectId}/ifc`, { method: "POST", body: fd });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(`Upload error: ${err.detail || res.status}`);
+            return;
+        }
+        await downloadEnrichedIfc();
+    } finally {
+        btn.disabled = false;
+        lbl.textContent = origLbl;
+        refreshExportIfcLabel();
+    }
+});
+
+async function downloadEnrichedIfc() {
+    const btn = document.getElementById("exportIfcBtn");
+    const lbl = document.getElementById("exportIfcLabel");
+    const origLbl = lbl.textContent;
+    btn.disabled = true; lbl.textContent = "Generating…";
+    try {
+        const res = await fetch(`/api/tracker/projects/${currentProjectId}/export-ifc`);
+        if (!res.ok) {
+            let msg = `HTTP ${res.status}`;
+            try { const j = await res.json(); msg = j.detail || msg; } catch {}
+            alert(`Export error: ${msg}`);
+            return;
+        }
+        const cd = res.headers.get("Content-Disposition") || "";
+        const m = cd.match(/filename="?([^"]+)"?/);
+        const filename = m ? m[1] : `project_${currentProjectId}.ifc`;
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+    } finally {
+        btn.disabled = false;
+        lbl.textContent = origLbl;
+    }
+}
+
+async function downloadBtpMatchPdf() {
+    if (!currentProjectId) { alert("No project selected."); return; }
+    const btn = document.getElementById("exportBtpMatchBtn");
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2"></i> Generating…`;
+    if (window.lucide) lucide.createIcons();
+    try {
+        const res = await fetch(`/api/tracker/projects/${currentProjectId}/export-btp-match-pdf`);
+        if (!res.ok) {
+            let msg = `HTTP ${res.status}`;
+            try { const j = await res.json(); msg = j.detail || msg; } catch {}
+            alert(`BTP Match export error: ${msg}`);
+            return;
+        }
+        const cd = res.headers.get("Content-Disposition") || "";
+        const m = cd.match(/filename="?([^"]+)"?/);
+        const filename = m ? m[1] : `btp_match_projet${currentProjectId}.pdf`;
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+        if (window.lucide) lucide.createIcons();
+    }
+}
+
+async function downloadCsv(endpoint, fallbackName) {
+    const btn = document.getElementById("exportReuseCsvBtn");
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2"></i> Generating…`;
+    if (window.lucide) lucide.createIcons();
+    try {
+        const res = await fetch(`/api/tracker/projects/${currentProjectId}/${endpoint}`);
+        if (!res.ok) {
+            let msg = `HTTP ${res.status}`;
+            try { const j = await res.json(); msg = j.detail || msg; } catch {}
+            alert(`CSV export error: ${msg}`);
+            return;
+        }
+        const cd = res.headers.get("Content-Disposition") || "";
+        const m = cd.match(/filename="?([^"]+)"?/);
+        const filename = m ? m[1] : fallbackName;
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+        if (window.lucide) lucide.createIcons();
+    }
+}
+
+async function deleteCurrentProject() {
+    if (!currentProjectId) {
+        alert("No project selected.");
+        return;
+    }
+    const sel = document.getElementById("projectSelect");
+    const projectLabel = sel.options[sel.selectedIndex]?.text || `Project #${currentProjectId}`;
+    const ok = confirm(
+        `⚠️ Permanently delete the project:\n\n"${projectLabel}"\n\n` +
+        `All its components AND their status history will be erased.\n` +
+        `This action is IRREVERSIBLE.\n\nContinue?`
+    );
+    if (!ok) return;
+
+    const res = await fetch(`/api/tracker/projects/${currentProjectId}`, { method: "DELETE" });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Error: ${err.detail || "Delete failed"}`);
+        return;
+    }
+    const result = await res.json();
+    setCurrentProjectId(null);
+    await loadProjects();
+    const projSel = document.getElementById("projectSelect");
+    if (projSel.options.length && projSel.options[0].value) {
+        setCurrentProjectId(projSel.options[0].value);
+        projSel.value = String(currentProjectId);
+    }
+    await loadStats();
+    await loadComponents();
+    alert(`✅ Project deleted — ${result.components_deleted} component(s) removed.`);
+}
+
+function onProjectChange() {
+    const sel = document.getElementById("projectSelect");
+    setCurrentProjectId(sel.value);
+    loadStats();
+    loadComponents();
+    refreshExportIfcLabel();
+}
+
+async function loadStats() {
+    if (!currentProjectId) {
+        document.getElementById("statsRow").innerHTML =
+            '<div class="stat-chip">No project selected</div>';
+        return;
+    }
+    const res  = await fetch(`/api/tracker/stats?${projectQuery()}`);
+    const data = await res.json();
+    const row  = document.getElementById("statsRow");
+    let html = `<div class="stat-chip">Total: <span>${data.total}</span></div>`;
+    const byStatus = data.by_status || data.par_statut || {};
+    for (const [s, n] of Object.entries(byStatus)) {
+        html += `<div class="stat-chip">${stLbl(s)}: <span>${n}</span></div>`;
+    }
+    row.innerHTML = html;
+
+    const sel = document.getElementById("filterType");
+    sel.innerHTML = '<option value="">All types</option>';
+    const byType = data.by_type || data.par_type || {};
+    for (const t of Object.keys(byType)) {
+        sel.innerHTML += `<option value="${t}">${tyLbl(t)}</option>`;
+    }
+}
+
+async function loadComponents() {
+    const body = document.getElementById("compBody");
+    if (!currentProjectId) {
+        body.innerHTML = '<tr><td colspan="7" class="empty-msg">Create a project to get started.</td></tr>';
+        document.getElementById("countLabel").textContent = "";
+        return;
+    }
+    const status = document.getElementById("filterStatus").value;
+    const type   = document.getElementById("filterType").value;
+    const params = new URLSearchParams({ project_id: currentProjectId });
+    if (status) params.set("status", status);
+    if (type)   params.set("type", type);
+
+    const res  = await fetch("/api/tracker/components?" + params);
+    const data = await res.json();
+    document.getElementById("countLabel").textContent = `${data.length} component(s)`;
+
+    if (!data.length) {
+        body.innerHTML = '<tr><td colspan="7" class="empty-msg">No components found.</td></tr>';
+        clearSelection();
+        return;
+    }
+    body.innerHTML = data.map(c => {
+        const escId = c.id.replace(/"/g, '&quot;');
+        const isSel = selectedIds.has(c.id);
+        return `
+        <tr data-id="${escId}" class="${isSel?'selected-row':''}" onclick="rowClick(event, '${c.project_id}', '${encodeURIComponent(c.id)}')">
+            <td style="text-align:center;" onclick="event.stopPropagation()">
+                <input type="checkbox" class="row-chk" data-id="${escId}" ${isSel?'checked':''}
+                       onclick="toggleRowCheck(this, event)">
+            </td>
+            <td class="text-mono" style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${c.id}">${c.id}</td>
+            <td>${tyLbl(c.type)}</td>
+            <td>${c.material||"—"}</td>
+            <td class="text-muted">${c.ifc_location||"—"}</td>
+            <td><span class="badge badge-${c.status}">${stLbl(c.status)}</span></td>
+            <td class="text-muted text-sm">${(c.updated_at||"").slice(0,16)}</td>
+        </tr>`;
+    }).join("");
+    refreshBulkBar();
+}
+
+const selectedIds = new Set();
+
+function rowClick(event, projectId, encodedId) {
+    if (event.target.tagName === "INPUT") return;
+    window.location = `/tracker/${projectId}/${encodedId}`;
+}
+
+function toggleRowCheck(checkbox, event) {
+    event.stopPropagation();
+    const id = checkbox.dataset.id;
+    if (checkbox.checked) selectedIds.add(id);
+    else selectedIds.delete(id);
+    const tr = checkbox.closest("tr");
+    if (tr) tr.classList.toggle("selected-row", checkbox.checked);
+    refreshBulkBar();
+    syncSelectAllCheckbox();
+}
+
+function toggleSelectAll(masterChk) {
+    const boxes = document.querySelectorAll(".row-chk");
+    boxes.forEach(b => {
+        if (b === masterChk) return;
+        b.checked = masterChk.checked;
+        const id = b.dataset.id;
+        if (id) {
+            if (masterChk.checked) selectedIds.add(id);
+            else selectedIds.delete(id);
+        }
+        const tr = b.closest("tr");
+        if (tr) tr.classList.toggle("selected-row", masterChk.checked);
+    });
+    refreshBulkBar();
+}
+
+function syncSelectAllCheckbox() {
+    const master = document.getElementById("selectAllChk");
+    const boxes = [...document.querySelectorAll(".row-chk")].filter(b => b !== master);
+    if (!boxes.length) { master.checked = false; master.indeterminate = false; return; }
+    const checked = boxes.filter(b => b.checked).length;
+    master.checked = checked === boxes.length;
+    master.indeterminate = checked > 0 && checked < boxes.length;
+}
+
+function refreshBulkBar() {
+    const bar = document.getElementById("bulkBar");
+    const count = selectedIds.size;
+    document.getElementById("bulkCount").textContent = count;
+    bar.style.display = count > 0 ? "flex" : "none";
+}
+
+function clearSelection() {
+    selectedIds.clear();
+    document.querySelectorAll(".row-chk").forEach(b => { b.checked = false; });
+    document.querySelectorAll("tr.selected-row").forEach(tr => tr.classList.remove("selected-row"));
+    const master = document.getElementById("selectAllChk");
+    if (master) { master.checked = false; master.indeterminate = false; }
+    refreshBulkBar();
+}
+
+// ============ CHANGEMENT DE STATUT EN MASSE ============
+const BULK_STATUS_PROMPTS = {
+    "transporté":   { title: "Destination",         question: "Where were these components transported?", placeholder: "e.g. North warehouse, Lyon" },
+    "stocké":       { title: "Component storage",   question: "Specify the storage reason and location.", placeholder: "e.g. Paris 13 depot, zone B", withReason: true },
+    "à réutiliser": { title: "Reuse location",       question: "Where will these components be reused?",   placeholder: "e.g. Jules Ferry school site" },
+    "à recycler":   { title: "Recycling location",   question: "Where will these components be recycled?", placeholder: "e.g. SUEZ sorting center" },
+};
+const STORAGE_REASONS = [
+    { value: "en attente de réutilisation",      label: "♻️ Pending reuse" },
+    { value: "en attente de recyclage",          label: "🔄 Pending recycling" },
+    { value: "en attente d'évacuation (déchet)", label: "🗑️ Pending disposal (waste)" },
+    { value: "stockage temporaire",              label: "⏳ Temporary storage (undefined)" },
+];
+
+function bulkSetStatus(newStatus) {
+    if (selectedIds.size === 0) return;
+    const prompt = BULK_STATUS_PROMPTS[newStatus];
+    if (!prompt) {
+        if (!confirm(`Change the status of ${selectedIds.size} component(s) to "${stLbl(newStatus)}"?`)) return;
+        submitBulkStatus(newStatus, null);
+        return;
+    }
+    openBulkLocationModal(newStatus, prompt);
+}
+
+function openBulkLocationModal(newStatus, prompt) {
+    document.getElementById("bulkLocModal")?.remove();
+    const reasonHtml = prompt.withReason ? `
+        <label class="form-label">Storage reason</label>
+        <select id="bulkReasonInput" class="select" style="margin-bottom:12px;">
+            ${STORAGE_REASONS.map(r => `<option value="${r.value}">${r.label}</option>`).join("")}
+        </select>
+        <label class="form-label">Storage location</label>
+    ` : "";
+    const overlay = document.createElement("div");
+    overlay.id = "bulkLocModal";
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header"><h3 class="modal-title"><i data-lucide="map-pin"></i> ${prompt.title}</h3></div>
+            <div class="modal-body">
+                <p class="text-muted text-sm mb-4">
+                    ${prompt.question}<br>
+                    <strong>${selectedIds.size} component(s)</strong> selected will receive the same status.
+                </p>
+                ${reasonHtml}
+                <input type="text" id="bulkLocInput" class="input" placeholder="${prompt.placeholder}" autocomplete="off">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('bulkLocModal').remove()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmBulkLocation('${newStatus}', ${!!prompt.withReason})">Confirm</button>
+            </div>
+        </div>`;
+    overlay.addEventListener("click", () => overlay.remove());
+    document.body.appendChild(overlay);
+    if (window.lucide) lucide.createIcons();
+    const input = document.getElementById("bulkLocInput");
+    input.focus();
+    input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") confirmBulkLocation(newStatus, !!prompt.withReason);
+        if (e.key === "Escape") overlay.remove();
+    });
+}
+
+function confirmBulkLocation(newStatus, withReason) {
+    const lieu = document.getElementById("bulkLocInput").value.trim();
+    if (!lieu) {
+        document.getElementById("bulkLocInput").style.borderColor = "var(--danger-500)";
+        return;
+    }
+    let note = `Location: ${lieu}`;
+    if (withReason) {
+        const reason = document.getElementById("bulkReasonInput").value;
+        note = `${reason} — Location: ${lieu}`;
+    }
+    document.getElementById("bulkLocModal").remove();
+    submitBulkStatus(newStatus, note);
+}
+
+async function submitBulkStatus(newStatus, note) {
+    const ids = [...selectedIds];
+    const res = await fetch("/api/tracker/components/bulk-status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids, status: newStatus, note }),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Error: ${err.detail || "update failed"}`);
+        return;
+    }
+    const result = await res.json();
+    let msg = `✅ ${result.updated} component(s) updated to "${stLbl(newStatus)}".`;
+    if (result.failed) msg += `\n⚠️ ${result.failed} failure(s).`;
+    alert(msg);
+    clearSelection();
+    await loadStats();
+    await loadComponents();
+}
+
+// ============ BULK META ============
+const BULK_CONDITIONS = ["Neuf", "Bon", "Moyen", "Mauvais"];
+const BULK_AGES = ["Inférieur à 2 ans", "Entre 2 et 10 ans", "Entre 10 et 50 ans", "Supérieur à 50 ans"];
+
+function openBulkMetaModal() {
+    if (selectedIds.size === 0) return;
+    document.getElementById("bulkMetaModal")?.remove();
+    const overlay = document.createElement("div");
+    overlay.id = "bulkMetaModal";
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <div class="modal-header"><h3 class="modal-title"><i data-lucide="clipboard-list"></i> Condition & info</h3></div>
+            <div class="modal-body">
+                <p class="text-muted text-sm mb-4">
+                    <strong>${selectedIds.size} component(s)</strong> selected will receive these values.<br>
+                    Leave "Don't change" to keep the existing value.
+                </p>
+                <div class="form-field mb-4">
+                    <label class="form-label">Condition / working state</label>
+                    <select id="bulkMetaCondition" class="select">
+                        <option value="__none__">— Don't change —</option>
+                        <option value="Neuf">New</option>
+                        <option value="Bon">Good</option>
+                        <option value="Moyen">Fair</option>
+                        <option value="Mauvais">Poor</option>
+                        <option value="">(Clear value)</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label class="form-label">Estimated age</label>
+                    <select id="bulkMetaAge" class="select">
+                        <option value="__none__">— Don't change —</option>
+                        <option value="Inférieur à 2 ans">Under 2 years</option>
+                        <option value="Entre 2 et 10 ans">2–10 years</option>
+                        <option value="Entre 10 et 50 ans">10–50 years</option>
+                        <option value="Supérieur à 50 ans">Over 50 years</option>
+                        <option value="">(Clear value)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('bulkMetaModal').remove()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitBulkMeta()"><i data-lucide="check"></i> Apply</button>
+            </div>
+        </div>`;
+    overlay.addEventListener("click", () => overlay.remove());
+    document.body.appendChild(overlay);
+    if (window.lucide) lucide.createIcons();
+}
+
+async function submitBulkMeta() {
+    const condSel = document.getElementById("bulkMetaCondition").value;
+    const ageSel  = document.getElementById("bulkMetaAge").value;
+    const payload = { ids: [...selectedIds] };
+    if (condSel !== "__none__") payload.condition = condSel;
+    if (ageSel  !== "__none__") payload.age_estimated = ageSel;
+    if (payload.condition === undefined && payload.age_estimated === undefined) {
+        alert("Select at least one field to update.");
+        return;
+    }
+    const res = await fetch("/api/tracker/components/bulk-meta", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(`Error: ${err.detail || "update failed"}`);
+        return;
+    }
+    const result = await res.json();
+    let msg = `✅ ${result.updated} component(s) updated.`;
+    if (result.failed) msg += `\n⚠️ ${result.failed} failure(s).`;
+    document.getElementById("bulkMetaModal")?.remove();
+    alert(msg);
+    clearSelection();
+    await loadStats();
+    await loadComponents();
+}
+
+// ============ PEMD MODAL ============
+let pemdModalRows = [];
+
+async function openPemdModal() {
+    if (!currentProjectId) { alert("No project selected."); return; }
+    document.getElementById("pemdModal")?.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "pemdModal";
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+        <div class="modal-box" style="max-width: 95vw; width: 1400px;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="justify-content:space-between;">
+                <h3 class="modal-title"><i data-lucide="table"></i> PEMD Report — Preview & Edit</h3>
+                <button class="btn btn-secondary btn-sm" onclick="closePemdModal()">Close</button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 0;">
+                <div style="padding: 16px; text-align: center; color: var(--text-muted);" id="pemdLoading">Loading grouped data…</div>
+                <div id="pemdTableContainer" style="display: none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closePemdModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="exportPemd('csv')"><i data-lucide="file-spreadsheet"></i> Export CSV</button>
+                <button class="btn btn-primary" onclick="exportPemd('pdf')"><i data-lucide="file-text"></i> Export PDF</button>
+            </div>
+        </div>`;
+    overlay.addEventListener("click", () => closePemdModal());
+    document.body.appendChild(overlay);
+    if (window.lucide) lucide.createIcons();
+
+    try {
+        const res = await fetch(`/api/tracker/projects/${currentProjectId}/pemd-grouped-data`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            document.getElementById("pemdLoading").textContent = `Error: ${err.detail || res.status}`;
+            return;
+        }
+        const rows = await res.json();
+        pemdModalRows = rows;
+        renderPemdModal(rows);
+    } catch (e) {
+        document.getElementById("pemdLoading").textContent = `Error: ${e.message}`;
+    }
+}
+
+function renderPemdModal(rows) {
+    document.getElementById("pemdLoading").style.display = "none";
+    const container = document.getElementById("pemdTableContainer");
+    container.style.display = "block";
+
+    if (!rows.length) {
+        container.innerHTML = `<p style="text-align:center;padding:48px;color:var(--text-muted);">No "To reuse" components found. Change component status to "To reuse" first.</p>`;
+        return;
+    }
+
+    const BLUE_MAIN = '#1e3a5f';
+    const BLUE_MID = '#bfdbfe';
+    const PURPLE_MID = '#8b8db0';
+    const PURPLE_LIGHT = '#c7c8e0';
+    const WHITE = '#ffffff';
+    const GREY_LIGHT = '#f3f4f6';
+
+    const html = `
+    <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:12px;background:${WHITE};border:1px solid ${BLUE_MAIN};">
+            <thead>
+                <tr>
+                    <th colspan="9" style="background:${BLUE_MAIN};color:${WHITE};padding:10px 6px;font-size:12px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};">
+                        Remplissez ces colonnes
+                    </th>
+                    <th colspan="4" style="background:${PURPLE_MID};color:${WHITE};padding:10px 6px;font-size:12px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};">
+                        Cochez la case pour indiquer si ces informations sont renseignées dans votre rapport de diagnostic (14)
+                    </th>
+                </tr>
+                <tr>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:9%;">
+                        Catégorie<br>(5)
+                    </th>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:11%;">
+                        Description<br>(6)
+                    </th>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:8%;">
+                        Quantité disponible et unité appropriée<br>(7)
+                    </th>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:8%;">
+                        Dimensions<br>(8)
+                    </th>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:8%;">
+                        Type principal d'assemblage<br>(9)
+                    </th>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:6%;">
+                        Âge estimé<br>(10)
+                    </th>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:8%;">
+                        État de conservation ou de fonctionnement estimé<br>(11)
+                    </th>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:8%;">
+                        Suspectez-vous la présence de substances dangereuses ou de polluant organique persistant dans ce PEM ?<br>(12)
+                    </th>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:9%;">
+                        Matériaux Constitutifs<br>(13)
+                    </th>
+                    <th style="background:${PURPLE_LIGHT};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:8%;">
+                        Localisation et fonction du PEM dans le bâtiment<br>(15)
+                    </th>
+                    <th style="background:${PURPLE_LIGHT};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:9%;">
+                        Conditions techniques et économiques pour permettre le réemploi du PEM<br>(16)
+                    </th>
+                    <th style="background:${PURPLE_LIGHT};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:8%;">
+                        Informations techniques disponibles<br>(17)
+                    </th>
+                    <th style="background:${PURPLE_LIGHT};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:8%;">
+                        Précautions de dépose, transport et stockage<br>(18)
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows.map((r, i) => `
+                <tr data-idx="${i}" style="background:${i%2===0?WHITE:GREY_LIGHT};">
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;font-size:11px;">${r.categorie}</td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;">
+                        <input type="text" data-field="description" value="${r.description}" style="width:100%;padding:4px;font-size:11px;border:1px solid #ccc;border-radius:4px;">
+                    </td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;font-size:11px;color:#666;">${r.quantite}</td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;">
+                        <input type="text" data-field="dimensions" value="${r.dimensions}" style="width:100%;padding:4px;font-size:11px;border:1px solid #ccc;border-radius:4px;">
+                    </td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;">
+                        <input type="text" data-field="assemblage" value="${r.assemblage}" style="width:100%;padding:4px;font-size:11px;border:1px solid #ccc;border-radius:4px;">
+                    </td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;">
+                        <input type="text" data-field="age_estime" value="${r.age_estime}" style="width:100%;padding:4px;font-size:11px;border:1px solid #ccc;border-radius:4px;">
+                    </td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;">
+                        <input type="text" data-field="etat" value="${r.etat}" style="width:100%;padding:4px;font-size:11px;border:1px solid #ccc;border-radius:4px;">
+                    </td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;">
+                        <input type="checkbox" data-field="substances_dangereuses" ${r.substances_dangereuses ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;">
+                    </td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;">
+                        <input type="text" data-field="materiaux" value="${r.materiaux}" style="width:100%;padding:4px;font-size:11px;border:1px solid #ccc;border-radius:4px;">
+                    </td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;">
+                        <input type="checkbox" data-field="localisation" ${r.localisation ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;">
+                    </td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;">
+                        <input type="checkbox" data-field="conditions_reemploi" ${r.conditions_reemploi ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;">
+                    </td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;">
+                        <input type="checkbox" data-field="infos_techniques" ${r.infos_techniques ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;">
+                    </td>
+                    <td style="padding:8px 6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;">
+                        <input type="checkbox" data-field="precautions" ${r.precautions ? 'checked' : ''} style="width:18px;height:18px;cursor:pointer;">
+                    </td>
+                </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    </div>`;
+    container.innerHTML = html;
+}
+
+function closePemdModal() {
+    document.getElementById("pemdModal")?.remove();
+    pemdModalRows = [];
+}
+
+async function exportPemd(format) {
+    const tbody = document.querySelector("#pemdTableContainer tbody");
+    if (!tbody) { alert("No data to export."); return; }
+
+    const rows = [];
+    tbody.querySelectorAll("tr").forEach(tr => {
+        const idx = Number(tr.dataset.idx);
+        const base = pemdModalRows[idx];
+        const updated = { ...base };
+        tr.querySelectorAll("[data-field]").forEach(el => {
+            const field = el.dataset.field;
+            if (el.type === "checkbox") {
+                updated[field] = el.checked;
+            } else {
+                updated[field] = el.value || "";
+            }
+        });
+        rows.push(updated);
+    });
+
+    const btn = event.target.closest("button");
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2"></i> Exporting…`;
+    if (window.lucide) lucide.createIcons();
+
+    try {
+        const res = await fetch(`/api/tracker/projects/${currentProjectId}/export-pemd`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ rows, format }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(`Export error: ${err.detail || res.status}`);
+            return;
+        }
+        const cd = res.headers.get("Content-Disposition") || "";
+        const m = cd.match(/filename="?([^"]+)"?/);
+        const filename = m ? m[1] : `PEMD_projet${currentProjectId}.${format}`;
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+        closePemdModal();
+    } catch (e) {
+        alert(`Export error: ${e.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+        if (window.lucide) lucide.createIcons();
+    }
+}
+
+// ============ WASTE CHARACTERIZATION MODAL ============
+const WASTE_TABS = [
+    { key: 'di', label: 'Déchets inertes' },
+    { key: 'dndni', label: 'DNDNI' },
+    { key: 'equipement', label: 'Déchets d\'équipements' },
+    { key: 'dd', label: 'Déchets dangereux (DD)' },
+    { key: 'annexe', label: 'Tableau annexe' },
+];
+
+const WASTE_CATEGORIES = {
+    dndni: [
+        'Plaques et carreaux', 'Enduits et supports inertes',
+        'Bois A (emballages, palettes)', 'Bois B : BR1', 'Bois B : BR2',
+        'Cuivre', 'Aluminium', 'Ferreux', 'Zinc',
+        'PP', 'PE', 'PVC', 'PS', 'PSE', 'XPS', 'Polyuréthane',
+        'Laines minérales de verre', 'Laines minérales de roche', 'Isolants biosourcés',
+        'Moquette', 'Linoléum', 'Parquet (massif, flottant)',
+        'Revêtements d\'étanchéité bitumineux', 'Revêtements d\'étanchéité synthétiques',
+        'Staff, stuc et plaques de gypse cellulose', 'Panneaux sandwich', 'Complexes plâtre + isolant',
+        'Fenêtres et autres ouvertures vitrées', 'Mélange de DND listés ci-dessus', 'Végétaux', 'Terre végétale'
+    ],
+    equipement: [
+        'Équipements sanitaires (lavabos, éviers, WC…)',
+        'Génie climatique (chauffage, climatisation, ventilation)',
+        'Équipements de chauffage, climatisation ou frigorifiques contenant des fluides frigorigènes dangereux',
+        'Matériel industriel ou mobilier',
+        'Conduits de fluide et canalisations',
+        'Câbles',
+        'Équipement divers (ascenseurs, armoires TGBT, …)',
+        'DEEE — Luminaires (tubes fluorescents, lampes à décharges, lampes à LED)',
+        'DEEE — Électroménagers'
+    ],
+    dd: [
+        'Amiante (précisez)',
+        'Enrobés à chaud contenant du goudron',
+        'Revêtements d\'étanchéité contenant du goudron',
+        'Éléments recouverts de peinture contenant des substances dangereuses',
+        'Bois traités contenant des substances dangereuses (Bois C)',
+        'Terres contenant des substances dangereuses'
+    ],
+    annexe: Array.from({length: 8}, (_, i) => `Ligne ${i + 1}`)
+};
+
+let wasteModalData = { di: [], dndni: [], equipement: [], dd: [], annexe: [] };
+let currentWasteTab = 'di';
+
+function createEmptyWasteRow(categorie) {
+    return {
+        categorie, code_dechet: '', masse: '', volume: '',
+        filiere_exutoires: false, pct_reutilisation: '', pct_recyclable: '',
+        pct_remblayage: '', pct_incineration_valo: '', pct_incineration_sans_valo: '',
+        pct_non_valorisable: '', conditions_techniques: false
+    };
+}
+
+function buildCERFATableHTML(rows, tableId) {
+    const BLUE_MAIN = '#1e3a5f';
+    const BLUE_MID = '#bfdbfe';
+    const GREEN_MID = '#86efac';
+    const GREEN_LIGHT = '#dcfce7';
+    const RED_LIGHT = '#fee2e2';
+    const WHITE = '#ffffff';
+    const GREY_LIGHT = '#f3f4f6';
+    return `
+    <div style="overflow-x:auto;">
+        <table id="${tableId}" style="width:100%;border-collapse:collapse;font-size:12px;background:${WHITE};border:1px solid ${BLUE_MAIN};" data-table="${tableId}">
+            <thead>
+                <tr>
+                    <th colspan="4" style="background:${BLUE_MAIN};color:${WHITE};padding:10px 6px;font-size:12px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};">Identification des déchets</th>
+                    <th rowspan="2" style="background:${BLUE_MAIN};color:${WHITE};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:7%;">Destination (21)<br><br>Le diagnostic identifie-t-il les filières et exutoires possibles ?<br>cochez pour oui</th>
+                    <th colspan="4" style="background:${GREEN_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:12px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};">Valorisation (22)</th>
+                    <th colspan="2" style="background:#fca5a5;color:${BLUE_MAIN};padding:10px 6px;font-size:12px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};">Élimination (22)</th>
+                    <th rowspan="2" style="background:${BLUE_MAIN};color:${WHITE};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:7%;">Conditions techniques<br><br>Le diagnostic identifie-t-il les conditions économiques et techniques nécessaires à la valorisation ou à l'élimination ?<br>cochez pour oui (24)</th>
+                </tr>
+                <tr>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:26%;min-width:220px;">Catégorie</th>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:6%;">Code déchet</th>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:6%;">Masse (tonnes)</th>
+                    <th style="background:${BLUE_MID};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:6%;">Volume (optionnel)</th>
+                    <th style="background:${GREEN_LIGHT};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:6%;">% Réutilisation (sur site ou hors site) (23)</th>
+                    <th style="background:${GREEN_LIGHT};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:6%;">Recyclable</th>
+                    <th style="background:${GREEN_LIGHT};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:6%;">Remblayage, complément de carrière</th>
+                    <th style="background:${GREEN_LIGHT};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:6%;">À incinérer avec valorisation énergétique</th>
+                    <th style="background:${RED_LIGHT};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:6%;">Incinération sans valorisation énergétique</th>
+                    <th style="background:${RED_LIGHT};color:${BLUE_MAIN};padding:10px 6px;font-size:10px;font-weight:600;text-align:center;border:1px solid ${BLUE_MAIN};width:6%;">% Non valorisable, à enfouir</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${rows.map((r, i) => `
+                <tr data-idx="${i}" style="background:${i%2===0?WHITE:GREY_LIGHT};">
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:left;vertical-align:middle;font-size:10px;word-break:break-word;">${r.categorie}</td>
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;"><input type="text" data-field="code_dechet" value="${r.code_dechet}" style="width:100%;padding:3px;font-size:10px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box;"></td>
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;"><input type="text" data-field="masse" value="${r.masse}" style="width:100%;padding:3px;font-size:10px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box;"></td>
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;"><input type="text" data-field="volume" value="${r.volume}" style="width:100%;padding:3px;font-size:10px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box;"></td>
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;"><input type="checkbox" data-field="filiere_exutoires" ${r.filiere_exutoires ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;"></td>
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;"><input type="text" data-field="pct_reutilisation" value="${r.pct_reutilisation}" style="width:100%;padding:3px;font-size:10px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box;"></td>
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;"><input type="text" data-field="pct_recyclable" value="${r.pct_recyclable}" style="width:100%;padding:3px;font-size:10px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box;"></td>
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;"><input type="text" data-field="pct_remblayage" value="${r.pct_remblayage}" style="width:100%;padding:3px;font-size:10px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box;"></td>
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;"><input type="text" data-field="pct_incineration_valo" value="${r.pct_incineration_valo}" style="width:100%;padding:3px;font-size:10px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box;"></td>
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;"><input type="text" data-field="pct_incineration_sans_valo" value="${r.pct_incineration_sans_valo}" style="width:100%;padding:3px;font-size:10px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box;"></td>
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;"><input type="text" data-field="pct_non_valorisable" value="${r.pct_non_valorisable}" style="width:100%;padding:3px;font-size:10px;border:1px solid #ccc;border-radius:3px;box-sizing:border-box;"></td>
+                    <td style="padding:6px;border:1px solid ${BLUE_MAIN};text-align:center;vertical-align:middle;"><input type="checkbox" data-field="conditions_techniques" ${r.conditions_techniques ? 'checked' : ''} style="width:16px;height:16px;cursor:pointer;"></td>
+                </tr>
+                `).join('')}
+            </tbody>
+        </table>
+    </div>`;
+}
+
+async function openDiModal() {
+    if (!currentProjectId) { alert("No project selected."); return; }
+    document.getElementById("diModal")?.remove();
+
+    // Initialize empty rows for non-DI tables
+    wasteModalData.dndni = WASTE_CATEGORIES.dndni.map(createEmptyWasteRow);
+    wasteModalData.equipement = WASTE_CATEGORIES.equipement.map(createEmptyWasteRow);
+    wasteModalData.dd = WASTE_CATEGORIES.dd.map(createEmptyWasteRow);
+    wasteModalData.annexe = WASTE_CATEGORIES.annexe.map(createEmptyWasteRow);
+
+    const overlay = document.createElement("div");
+    overlay.id = "diModal";
+    overlay.className = "modal-overlay";
+    overlay.innerHTML = `
+        <div class="modal-box" style="max-width: 95vw; width: 1400px;" onclick="event.stopPropagation()">
+            <div class="modal-header" style="justify-content:space-between;">
+                <h3 class="modal-title"><i data-lucide="trash-2"></i> Caractérisation des déchets</h3>
+                <button class="btn btn-secondary btn-sm" onclick="closeDiModal()">Close</button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto; padding: 0;">
+                <div style="padding: 16px; text-align: center; color: var(--text-muted);" id="diLoading">Loading…</div>
+                <div id="diTabBar" style="display:none; padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--slate-50);">
+                    ${WASTE_TABS.map(t => `<button class="btn btn-sm ${t.key === 'di' ? 'btn-primary' : 'btn-secondary'}" onclick="switchWasteTab('${t.key}')" data-tab="${t.key}" style="margin-right:8px;">${t.label}</button>`).join('')}
+                </div>
+                <div id="diTableContainer" style="display: none; padding: 16px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeDiModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="exportWasteReport('csv')"><i data-lucide="file-spreadsheet"></i> Export CSV</button>
+                <button class="btn btn-primary" onclick="exportWasteReport('pdf')"><i data-lucide="file-text"></i> Export PDF</button>
+            </div>
+        </div>`;
+    overlay.addEventListener("click", () => closeDiModal());
+    document.body.appendChild(overlay);
+    if (window.lucide) lucide.createIcons();
+
+    try {
+        const res = await fetch(`/api/tracker/projects/${currentProjectId}/di-grouped-data`);
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            document.getElementById("diLoading").textContent = `Error: ${err.detail || res.status}`;
+            return;
+        }
+        wasteModalData.di = await res.json();
+        document.getElementById("diLoading").style.display = "none";
+        document.getElementById("diTabBar").style.display = "block";
+        switchWasteTab('di');
+    } catch (e) {
+        document.getElementById("diLoading").textContent = `Error: ${e.message}`;
+    }
+}
+
+function switchWasteTab(tabKey) {
+    // Save current tab data before switching
+    if (currentWasteTab && currentWasteTab !== tabKey) {
+        const saved = collectTableData(`table-${currentWasteTab}`, wasteModalData[currentWasteTab]);
+        if (saved.length > 0) {
+            wasteModalData[currentWasteTab] = saved;
+        }
+    }
+    currentWasteTab = tabKey;
+    document.querySelectorAll('#diTabBar button').forEach(btn => {
+        btn.className = btn.dataset.tab === tabKey ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-secondary';
+        btn.style.marginRight = '8px';
+    });
+    const container = document.getElementById("diTableContainer");
+    container.style.display = "block";
+    container.innerHTML = buildCERFATableHTML(wasteModalData[tabKey], `table-${tabKey}`);
+}
+
+function closeDiModal() {
+    document.getElementById("diModal")?.remove();
+    wasteModalData = { di: [], dndni: [], equipement: [], dd: [], annexe: [] };
+}
+
+function collectTableData(tableId, baseRows) {
+    const table = document.getElementById(tableId);
+    if (!table) return [];
+    const tbody = table.querySelector('tbody');
+    if (!tbody) return [];
+    const rows = [];
+    tbody.querySelectorAll("tr").forEach((tr, idx) => {
+        const base = baseRows[idx] || createEmptyWasteRow('');
+        const updated = { ...base };
+        tr.querySelectorAll("[data-field]").forEach(el => {
+            const field = el.dataset.field;
+            if (el.type === "checkbox") {
+                updated[field] = el.checked;
+            } else {
+                updated[field] = el.value || "";
+            }
+        });
+        rows.push(updated);
+    });
+    return rows;
+}
+
+async function exportWasteReport(format) {
+    // Save current tab data first
+    wasteModalData[currentWasteTab] = collectTableData(`table-${currentWasteTab}`, wasteModalData[currentWasteTab]);
+
+    const payload = {};
+    WASTE_TABS.forEach(t => {
+        payload[t.key] = wasteModalData[t.key];
+    });
+
+    const btn = event.target.closest("button");
+    const orig = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<i data-lucide="loader-2"></i> Exporting…`;
+    if (window.lucide) lucide.createIcons();
+
+    try {
+        const res = await fetch(`/api/tracker/projects/${currentProjectId}/export-waste`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ tables: payload, format }),
+        });
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            alert(`Export error: ${err.detail || res.status}`);
+            return;
+        }
+        const cd = res.headers.get("Content-Disposition") || "";
+        const m = cd.match(/filename="?([^"]+)"?/);
+        const filename = m ? m[1] : `dechets_projet${currentProjectId}.${format}`;
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+        closeDiModal();
+    } catch (e) {
+        alert(`Export error: ${e.message}`);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = orig;
+        if (window.lucide) lucide.createIcons();
+    }
+}
+
+(async () => {
+    await loadProjects();
+    await loadStats();
+    await loadComponents();
+    refreshExportIfcLabel();
+})();
+</script>
+
+</body>
+</html>

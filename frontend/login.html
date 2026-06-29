@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion — IFC Analyzer</title>
+    <link rel="stylesheet" href="/static/assets/design.css?v=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body data-auth="public">
+    <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;">
+        <div class="card card-pad" style="max-width:420px;width:100%;">
+            <div class="stack">
+                <div class="row" style="justify-content:space-between;align-items:center;">
+                    <div>
+                        <div class="text-muted text-sm">IFC Analyzer</div>
+                        <h2 style="margin:4px 0 0;">Connexion</h2>
+                    </div>
+                    <div class="badge badge-primary">Secure</div>
+                </div>
+
+                <p class="text-muted" style="margin-top:4px;">
+                    Identifiez-vous pour accéder aux fonctionnalités.
+                </p>
+
+                <div id="loginAlert" class="alert alert-danger hidden"></div>
+
+                <form id="loginForm" class="stack" style="margin-top:8px;">
+                    <div class="form-field">
+                        <label class="form-label" for="emailInput">Email</label>
+                        <input class="input" id="emailInput" type="email" autocomplete="email" required>
+                    </div>
+                    <div class="form-field">
+                        <label class="form-label" for="passwordInput">Mot de passe</label>
+                        <input class="input" id="passwordInput" type="password" autocomplete="current-password" required>
+                    </div>
+                    <div class="row" style="justify-content:flex-end;gap:8px;">
+                        <button type="button" class="btn btn-secondary" id="registerBtn">
+                            Créer un compte
+                        </button>
+                        <button type="submit" class="btn btn-primary" id="loginBtn">
+                            Se connecter
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/auth.js?v=1"></script>
+    <script>
+        const form = document.getElementById("loginForm");
+        const registerBtn = document.getElementById("registerBtn");
+        const loginBtn = document.getElementById("loginBtn");
+        const alertBox = document.getElementById("loginAlert");
+        const emailInput = document.getElementById("emailInput");
+        const passwordInput = document.getElementById("passwordInput");
+
+        function setAlert(message, type = "danger") {
+            alertBox.className = `alert alert-${type}`;
+            alertBox.textContent = message;
+            alertBox.classList.remove("hidden");
+        }
+
+        function clearAlert() {
+            alertBox.classList.add("hidden");
+            alertBox.textContent = "";
+        }
+
+        function setLoading(isLoading) {
+            loginBtn.disabled = isLoading;
+            registerBtn.disabled = isLoading;
+        }
+
+        function nextUrl() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get("next") || "/";
+        }
+
+        function formatError(data) {
+            if (!data) return null;
+            if (typeof data.detail === "string") return data.detail;
+            if (Array.isArray(data.detail)) {
+                return data.detail.map(e => e.msg || JSON.stringify(e)).join(". ");
+            }
+            return JSON.stringify(data);
+        }
+
+        async function login(email, password) {
+            const res = await fetch("/api/auth/login", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password }),
+            });
+            if (!res.ok) {
+                let message = "Identifiants invalides.";
+                try {
+                    const data = await res.json();
+                    message = formatError(data) || message;
+                } catch (_) {}
+                throw new Error(message);
+            }
+            const data = await res.json();
+            window.setAuthToken(data.access_token);
+        }
+
+        async function register(email, password) {
+            const res = await fetch("/api/auth/register", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email, password }),
+            });
+            if (!res.ok) {
+                let message = "Inscription impossible.";
+                try {
+                    const data = await res.json();
+                    message = formatError(data) || message;
+                } catch (_) {}
+                throw new Error(message);
+            }
+        }
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            clearAlert();
+            setLoading(true);
+            try {
+                await login(emailInput.value.trim(), passwordInput.value);
+                window.location.href = nextUrl();
+            } catch (err) {
+                setAlert(err.message || "Erreur de connexion.");
+            } finally {
+                setLoading(false);
+            }
+        });
+
+        registerBtn.addEventListener("click", async () => {
+            clearAlert();
+            setLoading(true);
+            try {
+                await register(emailInput.value.trim(), passwordInput.value);
+                await login(emailInput.value.trim(), passwordInput.value);
+                setAlert("Compte créé avec succès.", "success");
+                window.location.href = nextUrl();
+            } catch (err) {
+                setAlert(err.message || "Erreur d'inscription.");
+            } finally {
+                setLoading(false);
+            }
+        });
+    </script>
+</body>
+</html>

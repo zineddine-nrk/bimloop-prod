@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IFC Extraction — IFC Analyzer</title>
+    <link rel="stylesheet" href="/static/assets/design.css?v=1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+<!-- ============ CONTENU PAGE ============ -->
+<div class="stack-lg fade-in">
+
+    <!-- Sous-titre / description -->
+    <p class="h-page-sub" style="margin-top:-12px;">
+        Upload an IFC file to automatically extract the component list with
+        their properties (materials, dimensions, floor, area, volume).
+    </p>
+
+    <!-- ============ ZONE D'UPLOAD ============ -->
+    <section class="upload-section" id="uploadSection">
+        <div class="dropzone upload-card">
+            <div class="dropzone-icon">
+                <i data-lucide="upload-cloud"></i>
+            </div>
+            <h3>Upload an IFC file</h3>
+            <p>Drag & drop your <code>.ifc</code> file or click the button below</p>
+            <input type="file" id="fileInput" accept=".ifc" hidden>
+            <div class="row" style="justify-content:center;">
+                <button class="btn btn-secondary" id="selectFileBtn">
+                    <i data-lucide="file-plus"></i>
+                    Select file
+                </button>
+                <button class="btn btn-primary" id="analyzeBtn" disabled>
+                    <i data-lucide="search"></i>
+                    Analyze
+                </button>
+            </div>
+            <div id="fileName" class="file-name"></div>
+        </div>
+    </section>
+
+    <!-- Loader -->
+    <div id="loader" class="loader hidden">
+        <div class="spinner spinner-lg"></div>
+        <p>Analyzing…</p>
+    </div>
+
+    <!-- Message succès -->
+    <div id="successMessage" class="alert alert-success hidden"></div>
+
+    <!-- Avertissements -->
+    <div id="warnings" class="warnings hidden"></div>
+
+    <!-- Résumé global -->
+    <section id="summarySection" class="summary-section hidden">
+        <h2 class="section-title">
+            <i data-lucide="bar-chart-3"></i>
+            Overview
+        </h2>
+        <div class="cards-grid" id="summaryCards"></div>
+    </section>
+
+    <!-- Comptage par type -->
+    <section id="typeCountSection" class="type-count-section hidden">
+        <h2 class="section-title">
+            <i data-lucide="layers"></i>
+            Breakdown by type
+        </h2>
+        <div class="cards-grid" id="typeCountCards"></div>
+    </section>
+
+    <!-- Filtres -->
+    <section id="filterSection" class="filter-section hidden">
+        <h2 class="section-title">
+            <i data-lucide="filter"></i>
+            Filter elements
+        </h2>
+        <div class="filter-buttons" id="filterButtons"></div>
+    </section>
+
+    <!-- Tableau -->
+    <section id="tableSection" class="table-section hidden">
+        <div class="card">
+            <div class="card-header">
+                <h3 class="card-title"><i data-lucide="table"></i> Extracted elements</h3>
+                <div class="export-buttons">
+                    <button class="btn btn-secondary btn-sm" id="exportAllPdfBtn">
+                        <i data-lucide="download"></i> All
+                    </button>
+                    <button class="btn btn-secondary btn-sm" id="exportTypePdfBtn">
+                        <i data-lucide="file-down"></i> Selection
+                    </button>
+                    <button class="btn btn-primary btn-sm" id="sendToTrackerBtn">
+                        <i data-lucide="send"></i> Send to Tracker
+                    </button>
+                </div>
+            </div>
+            <div class="table-wrapper" style="border:none;border-radius:0;box-shadow:none;">
+                <table id="dataTable">
+                    <thead id="tableHead"></thead>
+                    <tbody id="tableBody"></tbody>
+                </table>
+            </div>
+            <p id="noResultsMsg" class="no-results hidden">No element matches the selected filter.</p>
+        </div>
+    </section>
+
+</div>
+
+<!-- Auth + layout & app script -->
+<script src="/static/auth.js?v=1"></script>
+<script src="/static/assets/layout.js"></script>
+<script>
+    AppLayout.mount({
+        active: "extraction",
+        eyebrow: "Workspace",
+        title: "IFC Data Extraction",
+    });
+</script>
+<script src="/static/script.js?v=21"></script>
+
+</body>
+</html>

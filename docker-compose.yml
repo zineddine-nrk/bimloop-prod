@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: bimloop
+      POSTGRES_USER: bimloop
+      POSTGRES_PASSWORD: bimloop
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bimloop -d bimloop"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  ifc-analyzer:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DATA_DIR=/app/backend/data
+      - DATABASE_URL=postgresql+psycopg://bimloop:bimloop@postgres:5432/bimloop
+      - JWT_SECRET_KEY=change-me-in-production
+    volumes:
+      - ifc_data:/app/backend/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  ifc_data:
+  postgres_data:
